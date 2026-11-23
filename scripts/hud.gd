@@ -98,7 +98,7 @@ func _ready() -> void:
 	_scoreboard.add_child(_scoreboard_list)
 
 	var hint := Label.new()
-	hint.text = "WASD move · Shift sprint · Space jump · LMB fire · R reload · 1/2/3 weapons · G grenade · Tab scoreboard · Esc mouse"
+	hint.text = "WASD move · Shift sprint · Ctrl crouch/slide · Space jump · LMB fire · R reload · 1/2/3 weapons · G grenade · Tab scoreboard · Esc mouse"
 	hint.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	hint.offset_left = 14
 	hint.offset_bottom = -12
@@ -156,11 +156,14 @@ func show_announcement(text: String) -> void:
 	_announcement.visible = true
 	_announcement_time = 2.5
 
-func add_hitmarker(damage: int) -> void:
+func add_hitmarker(damage: int, headshot: bool = false) -> void:
 	_hitmarker.visible = true
+	_hitmarker.text = "×" if not headshot else "X"
+	_hitmarker.modulate = Color(1, 1, 1) if not headshot else Color(1, 0.25, 0.2)
 	_hitmarker_time = 0.12
 	var center := get_viewport().get_visible_rect().size * 0.5
-	var label := _make_label(str(damage), 20)
+	var label := _make_label(str(damage), 24 if headshot else 20)
+	label.modulate = _hitmarker.modulate
 	label.position = center + Vector2(randf_range(-45, 45), randf_range(-45, 10))
 	add_child(label)
 	_floaters.append({"label": label, "time": 0.8})

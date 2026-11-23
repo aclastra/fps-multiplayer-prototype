@@ -40,6 +40,8 @@ var kills := 0
 var deaths := 0
 var grenades := 2
 var perk_id := 0  # 0 none, 1 fast hands, 2 heavy armor, 3 lightweight
+var crouching := false
+var sliding := false
 
 # --- Local / server-only state --------------------------------------------
 var _is_local := false
@@ -71,6 +73,12 @@ var _state_buffer: Array = []
 var _history: Array = []
 var _last_input_time := 0.0
 var _damage_boost_timer := 0.0
+var _crouch_held := false
+var _prev_crouch := false
+var _slide_timer := 0.0
+var _slide_cooldown := 0.0
+var _bloom := 0.0
+var _recoil_kick := 0.0
 
 @onready var _collision: CollisionShape3D = $Collision
 @onready var _body_visual: PlayerBody = $BodyVisual
@@ -82,6 +90,9 @@ var _damage_boost_timer := 0.0
 
 func _ready() -> void:
 	add_to_group("players")
+	var own_shape := _collision.shape.duplicate(true) as CapsuleShape3D
+	if own_shape != null:
+		_collision.shape = own_shape
 	_show_own_body = OS.get_cmdline_user_args().has("--show-body")
 	_is_local = peer_id == multiplayer.get_unique_id()
 	_net_pos = global_position
@@ -216,6 +227,11 @@ func _capture_mouse() -> void:
 	else:
 		get_tree().create_timer(0.25).timeout.connect(_capture_mouse)
 
+func _process(delta: float) -> void:
+	_recoil_kick = maxf(0.0, _recoil_kick - delta * 20.0)
+	if _is_local and is_instance_valid(_camera_rig):
+		_camera_rig.rotation.x = pitch - deg_to_rad(_recoil_kick)
+
 func _physics_process(delta: float) -> void:
 	if multiplayer.multiplayer_peer == null:
 		return
@@ -225,6 +241,7 @@ func _physics_process(delta: float) -> void:
 		_move = Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 		_sprint = Input.is_action_pressed("sprint")
 		_jump_held = Input.is_action_pressed("jump")
+		_crouch_held = Input.is_action_pressed("crouch")
 		_fire = Input.is_action_pressed("fire") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 		if Input.is_action_just_pressed("reload"):
 			_reload_requested = true
@@ -242,7 +259,7 @@ func _physics_process(delta: float) -> void:
 		else:
 			# The host already has these values locally; RPCs to yourself are
 			# rejected by "any_peer" mode.
-			receive_input.rpc_id(1, _move, yaw, pitch, _sprint, _fire, _jump_held, _reload_requested, _local_input_seq)
+			receive_input.rpc_id(1, _move, yaw, pitch, _sprint, _fire, _jump_held, _reload_requested, _local_input_seq, _crouch_held)
 		_record_prediction(_local_input_seq, delta)
 		_apply_movement(_move, _sprint, _jump_held, delta)
 		# The server owns ammo/reload; clear the one-shot request once sent.
@@ -271,19 +288,54 @@ func _physics_process(delta: float) -> void:
 			reloading = _net_reloading
 		_body_visual.set_state(planar_speed, grounded, sprinting, reloading, dead)
 
+func _update_stance(delta: float) -> void:
+	_slide_cooldown = maxf(0.0, _slide_cooldown - delta)
+	if _slide_timer > 0.0:
+		_slide_timer -= delta
+		sliding = true
+		crouching = true
+		if _slide_timer <= 0.0:
+			sliding = false
+	else:
+		sliding = false
+		var edge := _crouch_held and not _prev_crouch
+		if edge and _sprint and Vector2(velocity.x, velocity.z).length() > 5.0 and _slide_cooldown <= 0.0 and is_on_floor():
+			_slide_timer = 0.6
+			_slide_cooldown = 1.2
+			sliding = true
+			crouching = true
+		else:
+			crouching = _crouch_held
+	_prev_crouch = _crouch_held
+	_apply_stance_visual()
+
+func _apply_stance_visual() -> void:
+	var shape := _collision.shape as CapsuleShape3D
+	if shape != null:
+		shape.height = 1.0 if crouching else 1.8
+	_collision.position.y = -0.4 if crouching else 0.0
+	_camera_rig.position.y = 0.15 if crouching else 0.6
+	_body_visual.scale.y = 0.75 if crouching else 1.0
+	_body_visual.position.y = -0.225 if crouching else 0.0
+
 func _apply_movement(move: Vector2, sprint: bool, jump_held: bool, delta: float) -> void:
 	if dead:
 		velocity = Vector3.ZERO
 		return
 
+	_update_stance(delta)
 	rotation.y = yaw
 
 	# Basis vectors already include yaw; +Z is "back", so move.y maps to +Z.
 	var direction := transform.basis.x * move.x + transform.basis.z * move.y
 	var horizontal := Vector3(direction.x, 0.0, direction.z).normalized()
 	var speed := effective_sprint_speed() if sprint else move_speed
+	if sliding:
+		speed = 14.0
+	elif crouching:
+		speed = 3.5
 
-	var jump_edge := jump_held and not _prev_jump
+	var jump_edge := jump_held and not _prev_jump and not crouching
 	_prev_jump = jump_held
 
 	if is_on_floor():
@@ -389,6 +441,7 @@ func _server_tick(delta: float) -> void:
 		return
 	if _damage_boost_timer > 0.0:
 		_damage_boost_timer -= delta
+	_bloom = maxf(0.0, _bloom - delta * 1.5)
 	if _reload_timer > 0.0:
 		_reload_timer -= delta
 		if _reload_timer <= 0.0:
@@ -435,7 +488,7 @@ func _server_shoot() -> void:
 	var right := base_dir.cross(Vector3.UP).normalized()
 	var up := right.cross(base_dir).normalized()
 	for pellet in range(maxi(1, weapon.pellets)):
-		var spread := deg_to_rad(weapon.spread_deg)
+		var spread := deg_to_rad(weapon.spread_deg + weapon.bloom_per_shot * _bloom)
 		var dir := (base_dir + right * randf_range(-spread, spread) + up * randf_range(-spread, spread)).normalized()
 		var wall_end := origin + dir * weapon.range
 		var query := PhysicsRayQueryParameters3D.create(origin, wall_end)
@@ -460,11 +513,22 @@ func _server_shoot() -> void:
 		show_tracer.rpc(origin, origin + dir * best_t)
 		if best_target == null:
 			continue
-		best_target.take_damage(int(round(weapon.damage * damage_multiplier())), peer_id)
+		var hit_y := origin.y + dir.y * best_t
+		var center := best_target.position_at(shoot_time)
+		var headshot := hit_y > center.y + 0.45
+		var distance := maxf(0.0, best_t)
+		var falloff := 1.0
+		if distance > weapon.falloff_start and weapon.range > weapon.falloff_start:
+			var ratio := clampf((distance - weapon.falloff_start) / (weapon.range - weapon.falloff_start), 0.0, 1.0)
+			falloff = lerpf(1.0, weapon.min_damage_scale, ratio)
+		var final_damage := int(round(weapon.damage * damage_multiplier() * falloff * (2.0 if headshot else 1.0)))
+		best_target.take_damage(final_damage, peer_id)
 		if peer_id == multiplayer.get_unique_id():
-			show_hit(weapon.damage, best_target.global_position)
+			show_hit(final_damage, best_target.global_position, headshot)
 		else:
-			show_hit.rpc_id(peer_id, weapon.damage, best_target.global_position)
+			show_hit.rpc_id(peer_id, final_damage, best_target.global_position, headshot)
+
+	_bloom = minf(weapon.bloom_max, _bloom + 1.0)
 
 func _ray_capsule_t(origin: Vector3, dir: Vector3, center: Vector3, radius: float, half_height: float) -> float:
 	var ox := origin.x - center.x
@@ -538,7 +602,11 @@ func _respawn() -> void:
 	grenades = 2
 	_refill_ammo()
 	dead = false
+	crouching = false
+	sliding = false
+	_slide_timer = 0.0
 	_collision.set_deferred("disabled", false)
+	_apply_stance_visual()
 	if is_instance_valid(_body_visual):
 		_body_visual.respawn()
 
@@ -569,7 +637,11 @@ func reset_for_match() -> void:
 	grenades = 2
 	_refill_ammo()
 	dead = false
+	crouching = false
+	sliding = false
+	_slide_timer = 0.0
 	_collision.set_deferred("disabled", false)
+	_apply_stance_visual()
 	if is_instance_valid(_body_visual):
 		_body_visual.respawn()
 
@@ -586,7 +658,8 @@ func receive_input(
 	fire: bool,
 	jump: bool,
 	reload: bool,
-	seq: int
+	seq: int,
+	crouch: bool
 ) -> void:
 	if not multiplayer.is_server():
 		return
@@ -602,6 +675,7 @@ func receive_input(
 	_sprint = sprint
 	_fire = fire
 	_jump_held = jump
+	_crouch_held = crouch
 	if reload:
 		_reload_requested = true
 
@@ -655,7 +729,9 @@ func _send_state(
 	new_weapon_index: int,
 	new_grenades: int,
 	new_velocity: Vector3,
-	ack_seq: int
+	ack_seq: int,
+	new_crouching: bool,
+	new_sliding: bool
 ) -> void:
 	if multiplayer.is_server():
 		return
@@ -683,6 +759,10 @@ func _send_state(
 	kills = new_kills
 	deaths = new_deaths
 	grenades = new_grenades
+	crouching = new_crouching
+	sliding = new_sliding
+	if not _is_local:
+		_apply_stance_visual()
 	if new_weapon_index != weapon_index:
 		weapon_index = new_weapon_index
 		ammo = ammo_by_weapon[clampi(weapon_index, 0, ammo_by_weapon.size() - 1)] if not ammo_by_weapon.is_empty() else ammo
@@ -697,16 +777,18 @@ func show_shot() -> void:
 		_body_visual.fire()
 	_flash.visible = true
 	var weapon := current_weapon()
+	if _is_local and weapon != null:
+		_recoil_kick = minf(6.0, _recoil_kick + weapon.recoil_deg)
 	Sound.play(weapon.fire_sound if weapon != null else "fire", -4.0)
 	get_tree().create_timer(0.06).timeout.connect(_hide_flash)
 
 @rpc("authority", "reliable", "call_local")
-func show_hit(damage: int, victim_pos: Vector3) -> void:
+func show_hit(damage: int, victim_pos: Vector3, headshot: bool = false) -> void:
 	if not _is_local:
 		return
 	var hud := get_tree().get_first_node_in_group("hud")
 	if hud != null and hud.has_method("add_hitmarker"):
-		hud.call("add_hitmarker", damage)
+		hud.call("add_hitmarker", damage, headshot)
 	Sound.play("hit", -3.0)
 
 @rpc("authority", "unreliable", "call_local")
@@ -785,7 +867,7 @@ func broadcast_state() -> void:
 	_send_state.rpc(
 		global_position, yaw, pitch, health, ammo, dead,
 		Vector2(velocity.x, velocity.z).length(), is_on_floor(), _sprint, _reload_timer > 0.0,
-		kills, deaths, weapon_index, grenades, velocity, _server_input_seq
+		kills, deaths, weapon_index, grenades, velocity, _server_input_seq, crouching, sliding
 	)
 
 func apply_snapshot(data: Dictionary) -> void:
@@ -801,6 +883,8 @@ func apply_snapshot(data: Dictionary) -> void:
 	weapon_index = int(data.get("weapon", weapon_index))
 	grenades = int(data.get("grenades", grenades))
 	perk_id = int(data.get("perk", perk_id))
+	crouching = bool(data.get("crouching", crouching))
+	sliding = bool(data.get("sliding", sliding))
 	max_health = effective_max_health()
 	display_name = String(data.get("name", display_name))
 	if is_instance_valid(_body_visual):

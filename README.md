@@ -47,6 +47,7 @@ Click into a game window once to capture the mouse before playing.
 | Sprint | Shift |
 | Jump | Space |
 | Reload | R |
+| Crouch / slide | Ctrl (hold to crouch, tap while sprinting to slide) |
 | Switch weapons | 1 / 2 / 3 |
 | Throw grenade | G |
 | Release mouse | Esc (click to recapture) |
@@ -162,6 +163,16 @@ in `scripts/match.gd`.
 The original roadmap is in `docs/ROADMAP.md` (milestones 1–4 and netcode
 hardening are done). Current focus is look and gameplay — see
 `docs/LOOK_AND_GAMEPLAY_PLAN.md` for the next themed milestones.
+
+## Movement & combat depth
+
+**Ctrl** crouches (lower capsule, slower movement, lower camera). Tapping it
+while sprinting at speed triggers a brief slide with a 1.2 s cooldown. Stance
+is server-validated and replicated.
+
+The server also owns headshot damage (2× for the upper capsule band), per-weapon
+recoil/bloom that grows while firing and recovers when idle, and range falloff.
+The client only displays recoil kick and distinct headshot markers.
 
 ## Loadouts & progression
 
