@@ -159,9 +159,9 @@ in `scripts/match.gd`.
 
 ## Next steps
 
-The development plan is in `docs/ROADMAP.md`. Milestones 1 (match flow/scoring)
-through 4 (match flow, weapons, pickups/grenades, combat feedback) are done;
-next are netcode hardening and delivery.
+The original roadmap is in `docs/ROADMAP.md` (milestones 1–4 and netcode
+hardening are done). Current focus is look and gameplay — see
+`docs/LOOK_AND_GAMEPLAY_PLAN.md` for the next themed milestones.
 
 ## Netcode
 
