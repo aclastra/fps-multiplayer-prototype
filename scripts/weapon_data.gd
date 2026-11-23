@@ -13,11 +13,6 @@ class_name WeaponData
 @export var range := 120.0
 @export var pellets := 1
 @export var spread_deg := 0.0
-@export var bloom_per_shot := 0.4
-@export var bloom_max := 3.0
-@export var recoil_deg := 1.2
-@export var falloff_start := 40.0
-@export var min_damage_scale := 0.5
 
 # First-person placement. The CC0 models have their muzzle pointing +Z and
 # sit with their footprint at y=0, so rotate 180deg to aim down -Z.

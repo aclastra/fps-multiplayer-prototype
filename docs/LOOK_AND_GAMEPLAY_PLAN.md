@@ -39,7 +39,7 @@ Files: `scenes/main.tscn`, new `scripts/environment.gd`, `scripts/viewmodel.gd`,
 
 ---
 
-## Milestone B — "Movement & Combat Depth" ✅ done
+## Milestone B — "Movement & Combat Depth"
 
 Goal: give the player meaningful movement and aiming decisions.
 

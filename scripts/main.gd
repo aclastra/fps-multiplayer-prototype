@@ -308,8 +308,6 @@ func _build_snapshot() -> Array:
 			"weapon": p.weapon_index,
 			"grenades": p.grenades,
 			"perk": p.perk_id,
-			"crouching": p.crouching,
-			"sliding": p.sliding,
 		})
 	return snapshot
 
