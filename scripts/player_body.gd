@@ -45,6 +45,7 @@ var _skeleton: Skeleton3D
 var _anim: AnimationPlayer
 var _library: AnimationLibrary
 var _weapon_attach: BoneAttachment3D
+var _armband_material: StandardMaterial3D
 
 var _playing := ""
 var _locomotion := "idle"
@@ -75,6 +76,7 @@ func _ready() -> void:
 		return
 
 	_attach_weapon_anchor()
+	_add_team_accents()
 	# The imported clips don't loop by default, so a 1-second walk/run would
 	# play once and then freeze while the player keeps moving.
 	for clip_name in ["walk", "run"]:
@@ -126,6 +128,26 @@ func _attach_weapon_anchor() -> void:
 	_weapon_attach.name = "WeaponAttach"
 	_skeleton.add_child(_weapon_attach)
 
+func _add_team_accents() -> void:
+	if _skeleton.find_bone("LeftArm") < 0:
+		return
+	var attach := BoneAttachment3D.new()
+	attach.bone_name = "LeftArm"
+	attach.name = "TeamAccentAttach"
+	_skeleton.add_child(attach)
+
+	var band := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(0.1, 0.11, 0.12)
+	band.mesh = box
+	_armband_material = StandardMaterial3D.new()
+	_armband_material.albedo_color = TEAM_TINTS[_team]
+	_armband_material.emission_enabled = true
+	_armband_material.emission = TEAM_TINTS[_team] * 0.4
+	band.material_override = _armband_material
+	band.position = Vector3(0, 0.02, 0)
+	attach.add_child(band)
+
 func set_weapon(scene: PackedScene) -> void:
 	if _weapon_attach == null:
 		return
@@ -159,6 +181,9 @@ func _tint_materials() -> void:
 func set_team(team: int) -> void:
 	_team = clampi(team, 0, TEAM_TINTS.size() - 1)
 	_tint_materials()
+	if _armband_material != null:
+		_armband_material.albedo_color = TEAM_TINTS[_team]
+		_armband_material.emission = TEAM_TINTS[_team] * 0.4
 
 # --- Derived animation clips ----------------------------------------------
 

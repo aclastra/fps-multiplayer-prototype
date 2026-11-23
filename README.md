@@ -44,6 +44,7 @@ Click into a game window once to capture the mouse before playing.
 | Move | W A S D |
 | Look | Mouse |
 | Fire | Left mouse button |
+| Aim (ADS) | Right mouse button |
 | Sprint | Shift |
 | Jump | Space |
 | Reload | R |
@@ -128,6 +129,15 @@ Three CC0 realistic weapons from the Mega Weapon Pack (see
 Stats live in `resources/weapons/*.tres`; the server owns ammo, reload and
 fire rate, and weapon switching is a server-validated RPC. HUD shows the
 current weapon and ammo.
+
+## Presentation
+
+The arena uses a warm directional light, ambient fill, ACES tone mapping and
+fog (`scripts/lighting.gd`). The first-person weapon sways with the mouse, bobs
+while moving, and blends to an aimed position with a narrower FOV on right
+mouse button (`scripts/weapon_view.gd`). Muzzle flashes are billboard quads;
+wall impacts spark briefly; firing and taking damage add small camera shake.
+Soldiers wear a team-colored armband.
 
 ## Combat feedback
 

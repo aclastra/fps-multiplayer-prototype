@@ -16,6 +16,7 @@ func _ready() -> void:
 	_add_key("grenade", KEY_G)
 	_add_key("crouch", KEY_CTRL)
 	_add_mouse("fire", MOUSE_BUTTON_LEFT)
+	_add_mouse("ads", MOUSE_BUTTON_RIGHT)
 
 func _add_key(action: String, keycode: Key) -> void:
 	if not InputMap.has_action(action):

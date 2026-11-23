@@ -81,6 +81,7 @@ var _slide_cooldown := 0.0
 var _camera_base_y := 0.6
 var _bloom := 0.0
 var _recoil_kick := 0.0
+var _shake := 0.0
 
 @onready var _collision: CollisionShape3D = $Collision
 @onready var _body_visual: PlayerBody = $BodyVisual
@@ -107,6 +108,7 @@ func _ready() -> void:
 	_label.text = display_name
 	_body_visual.set_team(team)
 	_update_weapon_visual()
+	_setup_muzzle_flash()
 
 	if _is_local:
 		_camera.current = true
@@ -127,6 +129,18 @@ func current_weapon() -> WeaponData:
 	if weapons.is_empty():
 		return null
 	return weapons[clampi(weapon_index, 0, weapons.size() - 1)]
+
+func _setup_muzzle_flash() -> void:
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.24, 0.24)
+	_flash.mesh = quad
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(1.0, 0.82, 0.45)
+	material.emission_enabled = true
+	material.emission = Color(1.0, 0.7, 0.25)
+	material.emission_energy_multiplier = 3.0
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	_flash.material_override = material
 
 func _update_weapon_visual() -> void:
 	var weapon := current_weapon()
@@ -209,6 +223,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		pitch = clampf(pitch - event.relative.y * mouse_sensitivity, -1.45, 1.45)
 		_camera_rig.rotation.x = pitch
 		rotation.y = yaw
+		if is_instance_valid(_weapon_view):
+			_weapon_view.add_sway(event.relative)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 			_grab_attempts = 0
@@ -233,8 +249,11 @@ func _process(delta: float) -> void:
 		global_position += step
 		_correction_offset -= step
 	_recoil_kick = maxf(0.0, _recoil_kick - delta * 12.0)
+	_shake = maxf(0.0, _shake - delta * 1.8)
 	if _is_local and is_instance_valid(_camera_rig):
-		_camera_rig.rotation.x = pitch - deg_to_rad(_recoil_kick)
+		var kick := _shake * randf_range(-1.0, 1.0)
+		_camera_rig.rotation.x = pitch - deg_to_rad(_recoil_kick) + kick
+		_camera_rig.rotation.z = kick * 0.6
 
 func _physics_process(delta: float) -> void:
 	if multiplayer.multiplayer_peer == null:
@@ -291,6 +310,11 @@ func _physics_process(delta: float) -> void:
 			sprinting = _net_sprinting
 			reloading = _net_reloading
 		_body_visual.set_state(planar_speed, grounded, sprinting, reloading, dead)
+		if _is_local and is_instance_valid(_weapon_view):
+			var ads := Input.is_action_pressed("ads")
+			_weapon_view.set_motion(planar_speed, delta)
+			_weapon_view.set_ads(ads)
+			_camera.fov = lerpf(_camera.fov, 55.0 if ads else 75.0, 1.0 - exp(-12.0 * delta))
 
 func _update_stance(delta: float) -> void:
 	_slide_cooldown = maxf(0.0, _slide_cooldown - delta)
@@ -509,7 +533,9 @@ func _server_shoot() -> void:
 		var wall_hit := space.intersect_ray(query)
 		var wall_t := weapon.range
 		if not wall_hit.is_empty():
-			wall_t = origin.distance_to(wall_hit.get("position", wall_end))
+			var hit_pos: Vector3 = wall_hit.get("position", wall_end)
+			wall_t = origin.distance_to(hit_pos)
+			show_impact.rpc(hit_pos)
 
 		var best_t := wall_t
 		var best_target: Player = null
@@ -621,6 +647,7 @@ func _respawn() -> void:
 	_slide_cooldown = 0.0
 	_bloom = 0.0
 	_recoil_kick = 0.0
+	_shake = 0.0
 	_apply_stance_visual()
 	_correction_offset = Vector3.ZERO
 	_prediction_history.clear()
@@ -661,6 +688,7 @@ func reset_for_match() -> void:
 	_slide_cooldown = 0.0
 	_bloom = 0.0
 	_recoil_kick = 0.0
+	_shake = 0.0
 	_apply_stance_visual()
 	_correction_offset = Vector3.ZERO
 	_prediction_history.clear()
@@ -802,6 +830,7 @@ func show_shot() -> void:
 	var weapon := current_weapon()
 	if _is_local and weapon != null:
 		_recoil_kick = minf(2.0, _recoil_kick + weapon.recoil_deg)
+		_shake = maxf(_shake, 0.035)
 	Sound.play(weapon.fire_sound if weapon != null else "fire", -4.0)
 	get_tree().create_timer(0.06).timeout.connect(_hide_flash)
 
@@ -823,6 +852,7 @@ func show_damage(attacker_pos: Vector3) -> void:
 	var hud := get_tree().get_first_node_in_group("hud")
 	if hud != null and hud.has_method("show_damage_direction"):
 		hud.call("show_damage_direction", angle)
+	_shake = maxf(_shake, 0.22)
 	Sound.play("hurt", -2.0)
 
 @rpc("authority", "unreliable", "call_local")
@@ -879,6 +909,25 @@ func show_streak(text: String) -> void:
 	var hud := get_tree().get_first_node_in_group("hud")
 	if hud != null and hud.has_method("show_announcement"):
 		hud.call("show_announcement", text)
+
+@rpc("authority", "unreliable", "call_local")
+func show_impact(pos: Vector3) -> void:
+	var spark := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.045
+	sphere.height = 0.09
+	spark.mesh = sphere
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(1.0, 0.8, 0.5)
+	material.emission_enabled = true
+	material.emission = Color(1.0, 0.65, 0.3)
+	spark.material_override = material
+	add_child(spark)
+	spark.global_position = pos
+	get_tree().create_timer(0.12).timeout.connect(func() -> void:
+		if is_instance_valid(spark):
+			spark.queue_free()
+	)
 
 func _hide_flash() -> void:
 	if is_inside_tree():

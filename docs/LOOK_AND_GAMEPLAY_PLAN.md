@@ -6,15 +6,15 @@ ends with a playable build, headless tests, and an in-game check.
 
 ---
 
-## Milestone A — "Atmosphere & Presentation" (in progress)
+## Milestone A — "Atmosphere & Presentation" ✅ done
 
 Goal: turn the flat dark box into a readable, moody arena and make weapons
 feel alive in the player's hands.
 
-**Done so far:** lighting/environment (`scripts/lighting.gd`) — directional
-light, ambient, ACES tone mapping, fog and fill lights. This fixed the
-"two-color" flat map. Still pending: viewmodel sway/bob, ADS, improved muzzle
-flash, impacts, camera shake and soldier accents.
+**Done:** lighting/environment (`scripts/lighting.gd`), viewmodel sway/bob and
+ADS (`scripts/weapon_view.gd`), billboard muzzle flash, server-confirmed impact
+sparks, camera shake, and team-colored armbands. All implemented without new
+lights/shadows or heavy effects.
 
 ### Lighting & atmosphere
 - Add a `WorldEnvironment` with a procedural sky, fog, and ACES tone mapping.

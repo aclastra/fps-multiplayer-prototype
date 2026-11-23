@@ -98,7 +98,7 @@ func _ready() -> void:
 	_scoreboard.add_child(_scoreboard_list)
 
 	var hint := Label.new()
-	hint.text = "WASD move · Shift sprint · Ctrl crouch/slide · Space jump · LMB fire · R reload · 1/2/3 weapons · G grenade · Tab scoreboard · Esc mouse"
+	hint.text = "WASD move · Shift sprint · Ctrl crouch/slide · Space jump · LMB fire · RMB aim · R reload · 1/2/3 weapons · G grenade · Tab scoreboard · Esc mouse"
 	hint.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	hint.offset_left = 14
 	hint.offset_bottom = -12
