@@ -500,7 +500,8 @@ func show_shot() -> void:
 	if is_instance_valid(_body_visual):
 		_body_visual.fire()
 	_flash.visible = true
-	Sound.play("fire", -4.0)
+	var weapon := current_weapon()
+	Sound.play(weapon.fire_sound if weapon != null else "fire", -4.0)
 	get_tree().create_timer(0.06).timeout.connect(_hide_flash)
 
 @rpc("authority", "reliable")
@@ -550,7 +551,8 @@ func show_tracer(origin: Vector3, end: Vector3) -> void:
 
 @rpc("authority", "reliable")
 func show_reload() -> void:
-	Sound.play("reload", -5.0)
+	var weapon := current_weapon()
+	Sound.play(weapon.reload_sound if weapon != null else "reload", -5.0)
 
 @rpc("authority", "reliable")
 func show_pickup() -> void:

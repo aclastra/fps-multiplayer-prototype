@@ -16,3 +16,5 @@ range = 35.0
 pellets = 8
 spread_deg = 5.0
 view_offset = Vector3(0.24, -0.25, -0.44)
+fire_sound = "fire_shotgun"
+reload_sound = "reload_shotgun"

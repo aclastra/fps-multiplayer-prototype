@@ -10,3 +10,5 @@ display_name = "Rifle"
 scene = ExtResource("1_fwyd3")
 fire_interval = 0.14
 view_offset = Vector3(0.24, -0.26, -0.46)
+fire_sound = "fire_rifle"
+reload_sound = "reload_rifle"

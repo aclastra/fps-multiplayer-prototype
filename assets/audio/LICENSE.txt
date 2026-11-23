@@ -1,0 +1,21 @@
+Sound sources
+
+Real weapon sounds (CC0 1.0, no attribution required):
+- fire_rifle.wav  — trimmed from "sks.wav", Gunshot Sounds by Tabasco
+                    https://opengameart.org/content/gunshot-sounds
+- fire_smg.wav    — trimmed from "cz.wav", Gunshot Sounds by Tabasco
+                    https://opengameart.org/content/gunshot-sounds
+- fire_shotgun.wav — trimmed from "shotty.wav", Gunshot Sounds by Tabasco
+                    https://opengameart.org/content/gunshot-sounds
+- reload_rifle.wav — "assaultriflereload1.wav", Gun reload sounds by SpringySpringo
+                    https://opengameart.org/content/gun-reload-sounds
+- reload_smg.wav   — "gunreload1.wav", Gun reload sounds by SpringySpringo
+                    https://opengameart.org/content/gun-reload-sounds
+- reload_shotgun.mp3 — "Rack.mp3", Shotgun Reload Sound effects by zer0_sol
+                    https://opengameart.org/content/shotgun-reload-sound-effects
+
+All source files are CC0 1.0 Universal. They were trimmed to single shots,
+converted to mono, peak-normalized and fade-tailored for in-game use.
+
+Procedurally generated placeholders (CC0, made for this project):
+- hit.wav, hurt.wav, death.wav, pickup.wav, fire.wav, reload.wav

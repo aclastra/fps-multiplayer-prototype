@@ -19,3 +19,6 @@ class_name WeaponData
 @export var view_offset := Vector3(0.22, -0.24, -0.42)
 @export var view_rotation := Vector3(0.0, 3.14159, 0.0)
 @export var view_scale := 1.0
+
+@export var fire_sound: String = "fire"
+@export var reload_sound: String = "reload"

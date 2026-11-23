@@ -134,8 +134,10 @@ Confirmed hits show a hit marker and floating damage number; taking damage
 shows a directional arrow and a hurt sound. Every shot spawns a brief tracer
 line to its impact point, reloads/pickups/deaths have sounds, and the camera
 tilts on death before respawn. All effects are driven by server RPCs, so
-clients cannot fake hits. Sounds are small locally generated WAVs in
-`assets/audio/` and play through the `Sound` autoload.
+clients cannot fake hits. Gunshots and reloads are real CC0 recordings from
+OpenGameArt (trimmed to single shots); hit/hurt/death/pickup are generated
+tones. See `assets/audio/LICENSE.txt`. Sounds play through the `Sound`
+autoload, with per-weapon fire/reload clips in `resources/weapons/*.tres`.
 
 ## Pickups & grenades
 

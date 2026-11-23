@@ -3,7 +3,13 @@ extends Node
 
 const CLIPS := {
 	"fire": "res://assets/audio/fire.wav",
+	"fire_rifle": "res://assets/audio/fire_rifle.wav",
+	"fire_smg": "res://assets/audio/fire_smg.wav",
+	"fire_shotgun": "res://assets/audio/fire_shotgun.wav",
 	"reload": "res://assets/audio/reload.wav",
+	"reload_rifle": "res://assets/audio/reload_rifle.wav",
+	"reload_smg": "res://assets/audio/reload_smg.wav",
+	"reload_shotgun": "res://assets/audio/reload_shotgun.mp3",
 	"hit": "res://assets/audio/hit.wav",
 	"hurt": "res://assets/audio/hurt.wav",
 	"death": "res://assets/audio/death.wav",

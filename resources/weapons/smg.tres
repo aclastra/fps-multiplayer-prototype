@@ -16,3 +16,5 @@ range = 70.0
 spread_deg = 1.5
 view_offset = Vector3(0.22, -0.23, -0.38)
 view_scale = 1.05
+fire_sound = "fire_smg"
+reload_sound = "reload_smg"
