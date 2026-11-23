@@ -8,7 +8,7 @@ extends Node3D
 
 const PORT := 7777
 const MAX_PLAYERS := 8
-const STATE_HZ := 20.0
+const STATE_HZ := 30.0
 
 const _player_scene := preload("res://scenes/player.tscn")
 const _pickup_script := preload("res://scripts/pickup.gd")

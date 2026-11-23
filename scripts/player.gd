@@ -79,6 +79,7 @@ var _slide_timer := 0.0
 var _slide_cooldown := 0.0
 var _bloom := 0.0
 var _recoil_kick := 0.0
+var _correction_offset := Vector3.ZERO
 
 @onready var _collision: CollisionShape3D = $Collision
 @onready var _body_visual: PlayerBody = $BodyVisual
@@ -229,6 +230,10 @@ func _capture_mouse() -> void:
 
 func _process(delta: float) -> void:
 	_recoil_kick = maxf(0.0, _recoil_kick - delta * 20.0)
+	if _is_local and _correction_offset.length_squared() > 0.000001:
+		var step := _correction_offset * minf(1.0, delta * 12.0)
+		global_position += step
+		_correction_offset -= step
 	if _is_local and is_instance_valid(_camera_rig):
 		_camera_rig.rotation.x = pitch - deg_to_rad(_recoil_kick)
 
@@ -386,9 +391,10 @@ func _reconcile(auth_pos: Vector3, auth_vel: Vector3, ack_seq: int) -> void:
 		if int(_prediction_history[i]["seq"]) == ack_seq:
 			start = i
 			break
+	var predicted_pos := global_position
+	var predicted_vel := velocity
 	if start == -1:
-		global_position = auth_pos
-		velocity = auth_vel
+		_queue_correction(auth_pos - predicted_pos)
 		return
 
 	var saved_move := _move
@@ -404,12 +410,23 @@ func _reconcile(auth_pos: Vector3, auth_vel: Vector3, ack_seq: int) -> void:
 		_jump_held = entry["jump"]
 		_prev_jump = entry["prev_jump"]
 		_apply_movement(_move, _sprint, _jump_held, float(entry["delta"]))
+	var corrected_pos := global_position
+	global_position = predicted_pos
+	velocity = predicted_vel
 	_move = saved_move
 	_sprint = saved_sprint
 	_jump_held = saved_jump
 	_prev_jump = saved_prev
+	_queue_correction(corrected_pos - predicted_pos)
 	while _prediction_history.size() > 0 and int(_prediction_history[0]["seq"]) <= ack_seq:
 		_prediction_history.remove_at(0)
+
+func _queue_correction(offset: Vector3) -> void:
+	if offset.length() < 0.08:
+		return
+	# Spread the correction over several frames instead of teleporting.
+	_correction_offset += offset.limit_length(0.5) * 0.7
+	_correction_offset = _correction_offset.limit_length(0.6)
 
 func _interpolate(_delta: float) -> void:
 	if _state_buffer.is_empty():
@@ -605,6 +622,8 @@ func _respawn() -> void:
 	crouching = false
 	sliding = false
 	_slide_timer = 0.0
+	_correction_offset = Vector3.ZERO
+	_prediction_history.clear()
 	_collision.set_deferred("disabled", false)
 	_apply_stance_visual()
 	if is_instance_valid(_body_visual):
@@ -640,6 +659,8 @@ func reset_for_match() -> void:
 	crouching = false
 	sliding = false
 	_slide_timer = 0.0
+	_correction_offset = Vector3.ZERO
+	_prediction_history.clear()
 	_collision.set_deferred("disabled", false)
 	_apply_stance_visual()
 	if is_instance_valid(_body_visual):
