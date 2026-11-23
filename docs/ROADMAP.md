@@ -86,7 +86,7 @@ Files: `scripts/pickup.gd`, `scripts/grenade.gd`, `scripts/arena.gd`,
 
 ---
 
-## Milestone 4 — Combat feedback
+## Milestone 4 — Combat feedback ✅ done
 
 Goal: make hits and deaths readable.
 

@@ -128,6 +128,15 @@ Stats live in `resources/weapons/*.tres`; the server owns ammo, reload and
 fire rate, and weapon switching is a server-validated RPC. HUD shows the
 current weapon and ammo.
 
+## Combat feedback
+
+Confirmed hits show a hit marker and floating damage number; taking damage
+shows a directional arrow and a hurt sound. Every shot spawns a brief tracer
+line to its impact point, reloads/pickups/deaths have sounds, and the camera
+tilts on death before respawn. All effects are driven by server RPCs, so
+clients cannot fake hits. Sounds are small locally generated WAVs in
+`assets/audio/` and play through the `Sound` autoload.
+
 ## Pickups & grenades
 
 Four server-authoritative pickups sit in the arena: two health packs (+30 HP,
@@ -149,8 +158,8 @@ in `scripts/match.gd`.
 ## Next steps
 
 The development plan is in `docs/ROADMAP.md`. Milestones 1 (match flow/scoring)
-and 2 (weapons) and 3 (pickups/grenades) are done; next are combat feedback,
-then netcode hardening and delivery.
+through 4 (match flow, weapons, pickups/grenades, combat feedback) are done;
+next are netcode hardening and delivery.
 
 ## Known limitations
 

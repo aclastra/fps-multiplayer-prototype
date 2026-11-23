@@ -33,6 +33,10 @@ func _process(delta: float) -> void:
 			break
 
 func _collect(player: Player) -> void:
+	if player.peer_id == multiplayer.get_unique_id():
+		player.show_pickup()
+	else:
+		player.show_pickup.rpc_id(player.peer_id)
 	if type == Type.HEALTH:
 		player.health = mini(player.max_health, player.health + 30)
 	else:

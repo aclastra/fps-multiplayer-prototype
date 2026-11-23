@@ -287,6 +287,7 @@ func _server_tick(delta: float) -> void:
 			_reload_timer = 0.0
 	elif _reload_requested and ammo < weapon.magazine and not dead:
 		_reload_timer = weapon.reload_time
+		show_reload.rpc()
 	_reload_requested = false
 
 	if _fire and not dead and ammo > 0 and _fire_cooldown <= 0.0 and _reload_timer <= 0.0:
@@ -315,14 +316,22 @@ func _server_shoot() -> void:
 	for pellet in range(maxi(1, weapon.pellets)):
 		var spread := deg_to_rad(weapon.spread_deg)
 		var dir := (base_dir + right * randf_range(-spread, spread) + up * randf_range(-spread, spread)).normalized()
-		var query := PhysicsRayQueryParameters3D.create(origin, origin + dir * weapon.range)
+		var end := origin + dir * weapon.range
+		var query := PhysicsRayQueryParameters3D.create(origin, end)
 		query.exclude = [get_rid()]
 		var hit := space.intersect_ray(query)
+		if not hit.is_empty():
+			end = hit.get("position", end)
+		show_tracer.rpc(origin, end)
 		if hit.is_empty():
 			continue
 		var target: Object = hit.get("collider")
 		if target is Player and target != self:
 			(target as Player).take_damage(weapon.damage, peer_id)
+			if peer_id == multiplayer.get_unique_id():
+				show_hit(weapon.damage, (target as Player).global_position)
+			else:
+				show_hit.rpc_id(peer_id, weapon.damage, (target as Player).global_position)
 
 func take_damage(amount: int, attacker_id: int) -> void:
 	if not multiplayer.is_server() or dead:
@@ -330,10 +339,22 @@ func take_damage(amount: int, attacker_id: int) -> void:
 	health = maxi(0, health - amount)
 	if is_instance_valid(_body_visual):
 		_body_visual.hit()
+	var game := get_tree().get_first_node_in_group("game_manager")
+	var attacker_pos := global_position
+	if game != null and game.has_method("get_player"):
+		var attacker: Player = game.call("get_player", attacker_id) as Player
+		if attacker != null:
+			attacker_pos = attacker.global_position
+	if peer_id == multiplayer.get_unique_id():
+		show_damage(attacker_pos)
+	else:
+		show_damage.rpc_id(peer_id, attacker_pos)
 	if health == 0:
+		if peer_id == multiplayer.get_unique_id():
+			Sound.play("death", -2.0)
+			_camera_rig.rotation.z = -0.45
 		dead = true
 		_collision.set_deferred("disabled", true)
-		var game := get_tree().get_first_node_in_group("game_manager")
 		if game != null and game.has_method("report_kill"):
 			game.call("report_kill", attacker_id, peer_id)
 		get_tree().create_timer(3.0).timeout.connect(_respawn)
@@ -479,7 +500,62 @@ func show_shot() -> void:
 	if is_instance_valid(_body_visual):
 		_body_visual.fire()
 	_flash.visible = true
+	Sound.play("fire", -4.0)
 	get_tree().create_timer(0.06).timeout.connect(_hide_flash)
+
+@rpc("authority", "reliable")
+func show_hit(damage: int, victim_pos: Vector3) -> void:
+	if not _is_local:
+		return
+	var hud := get_tree().get_first_node_in_group("hud")
+	if hud != null and hud.has_method("add_hitmarker"):
+		hud.call("add_hitmarker", damage)
+	Sound.play("hit", -3.0)
+
+@rpc("authority", "unreliable")
+func show_damage(attacker_pos: Vector3) -> void:
+	if not _is_local:
+		return
+	var local_dir := global_transform.basis.inverse() * (attacker_pos - global_position)
+	var angle := atan2(local_dir.x, -local_dir.z)
+	var hud := get_tree().get_first_node_in_group("hud")
+	if hud != null and hud.has_method("show_damage_direction"):
+		hud.call("show_damage_direction", angle)
+	Sound.play("hurt", -2.0)
+
+@rpc("authority", "unreliable")
+func show_tracer(origin: Vector3, end: Vector3) -> void:
+	var length := origin.distance_to(end)
+	if length < 0.01:
+		return
+	var tracer := MeshInstance3D.new()
+	var cylinder := CylinderMesh.new()
+	cylinder.top_radius = 0.006
+	cylinder.bottom_radius = 0.006
+	cylinder.height = length
+	tracer.mesh = cylinder
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(1.0, 0.8, 0.4)
+	material.emission_enabled = true
+	material.emission = material.albedo_color
+	tracer.material_override = material
+	add_child(tracer)
+	tracer.global_position = (origin + end) * 0.5
+	tracer.look_at(end, Vector3.UP)
+	tracer.rotate_x(PI * 0.5)
+	get_tree().create_timer(0.05).timeout.connect(func() -> void:
+		if is_instance_valid(tracer):
+			tracer.queue_free()
+	)
+
+@rpc("authority", "reliable")
+func show_reload() -> void:
+	Sound.play("reload", -5.0)
+
+@rpc("authority", "reliable")
+func show_pickup() -> void:
+	if _is_local:
+		Sound.play("pickup", -4.0)
 
 func _hide_flash() -> void:
 	if is_inside_tree():
@@ -522,3 +598,5 @@ func _apply_visuals() -> void:
 	_label.visible = not _is_local and not dead
 	rotation.y = yaw
 	_camera_rig.rotation.x = pitch
+	if not dead:
+		_camera_rig.rotation.z = 0.0

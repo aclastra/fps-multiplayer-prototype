@@ -10,6 +10,10 @@ var _banner: Label
 var _center_msg: Label
 var _scoreboard: PanelContainer
 var _scoreboard_list: VBoxContainer
+var _hitmarker: Label
+var _floaters: Array = []
+var _damage_arrows: Array = []
+var _hitmarker_time := 0.0
 
 func _ready() -> void:
 	add_to_group("hud")
@@ -39,6 +43,13 @@ func _ready() -> void:
 	crosshair.add_theme_font_size_override("font_size", 30)
 	crosshair.position = Vector2(-10, -18)
 	add_child(crosshair)
+
+	_hitmarker = _make_label("×", 26)
+	_hitmarker.set_anchors_preset(Control.PRESET_CENTER)
+	_hitmarker.offset_left = -12
+	_hitmarker.offset_top = -24
+	_hitmarker.visible = false
+	add_child(_hitmarker)
 
 	_feed = VBoxContainer.new()
 	_feed.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -110,7 +121,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.keycode == KEY_TAB:
 		_scoreboard.visible = event.pressed
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_animate_feedback(delta)
 	if _scoreboard.visible:
 		_refresh_scoreboard()
 	if multiplayer.multiplayer_peer == null:
@@ -127,6 +139,46 @@ func _process(_delta: float) -> void:
 		_grenades.text = "GRENADES  %d   [G]" % p.grenades
 		_status.text = "DEAD — respawning..." if p.dead else ""
 		return
+
+func add_hitmarker(damage: int) -> void:
+	_hitmarker.visible = true
+	_hitmarker_time = 0.12
+	var center := get_viewport().get_visible_rect().size * 0.5
+	var label := _make_label(str(damage), 20)
+	label.position = center + Vector2(randf_range(-45, 45), randf_range(-45, 10))
+	add_child(label)
+	_floaters.append({"label": label, "time": 0.8})
+
+func show_damage_direction(angle: float) -> void:
+	var arrow := _make_label("◄", 26)
+	var center := get_viewport().get_visible_rect().size * 0.5
+	arrow.position = center + Vector2(cos(angle), sin(angle)) * 170.0 - Vector2(10, 16)
+	arrow.rotation = angle + PI
+	add_child(arrow)
+	_damage_arrows.append({"label": arrow, "time": 1.0})
+
+func _animate_feedback(delta: float) -> void:
+	if _hitmarker_time > 0.0:
+		_hitmarker_time -= delta
+		if _hitmarker_time <= 0.0:
+			_hitmarker.visible = false
+
+	for entry in _floaters.duplicate():
+		entry["time"] -= delta
+		var label: Label = entry["label"]
+		label.position.y -= 45.0 * delta
+		label.modulate.a = clampf(float(entry["time"]) / 0.8, 0.0, 1.0)
+		if entry["time"] <= 0.0:
+			label.queue_free()
+			_floaters.erase(entry)
+
+	for entry in _damage_arrows.duplicate():
+		entry["time"] -= delta
+		var arrow: Label = entry["label"]
+		arrow.modulate.a = clampf(float(entry["time"]), 0.0, 1.0)
+		if entry["time"] <= 0.0:
+			arrow.queue_free()
+			_damage_arrows.erase(entry)
 
 func _refresh_scoreboard() -> void:
 	for child in _scoreboard_list.get_children():
