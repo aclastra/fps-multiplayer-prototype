@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="PackedScene" path="res://assets/models/weapons/shotgun.glb" id="1_4rfis"]
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="2_eea6l"]
+
+[resource]
+script = ExtResource("2_eea6l")
+id = &"shotgun"
+display_name = "Shotgun"
+scene = ExtResource("1_4rfis")
+damage = 12
+fire_interval = 0.75
+magazine = 8
+reload_time = 1.8
+range = 35.0
+pellets = 8
+spread_deg = 5.0
+view_offset = Vector3(0.24, -0.25, -0.44)

@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="PackedScene" path="res://assets/models/weapons/smg.glb" id="1_nx4t2"]
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="2_v2t4f"]
+
+[resource]
+script = ExtResource("2_v2t4f")
+id = &"smg"
+display_name = "SMG"
+scene = ExtResource("1_nx4t2")
+damage = 15
+fire_interval = 0.075
+magazine = 35
+reload_time = 1.0
+range = 70.0
+spread_deg = 1.5
+view_offset = Vector3(0.22, -0.23, -0.38)
+view_scale = 1.05

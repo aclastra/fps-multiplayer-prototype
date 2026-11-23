@@ -1,0 +1,12 @@
+Weapons from the Mega Weapon Pack by 3D Assets (3DAssets.dev)
+- Rifle:      https://3dassets.dev/assets/mega-weapon-pack-standard-rifle-94762172
+              https://cdn.3dassets.dev/assets/33318/v1/model.glb
+- SMG:        https://3dassets.dev/assets/mega-weapon-pack-bullpup-smg-b2a1f487
+              https://cdn.3dassets.dev/assets/33305/v1/model.glb
+- Shotgun:    https://3dassets.dev/assets/mega-weapon-pack-bullpup-shotgun-loadout-0f97efcb
+              https://cdn.3dassets.dev/assets/33446/v1/model.glb
+
+License: CC0 1.0 Universal (public domain dedication).
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Commercial use, modification and redistribution allowed. No attribution required.

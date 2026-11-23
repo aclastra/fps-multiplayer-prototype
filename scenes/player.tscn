@@ -1,0 +1,42 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
+[ext_resource type="Script" path="res://scripts/player_body.gd" id="2_body"]
+[ext_resource type="Script" path="res://scripts/weapon_view.gd" id="3_view"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="SphereMesh" id="SphereMesh_flash"]
+radius = 0.16
+height = 0.16
+
+[node name="Player" type="CharacterBody3D"]
+script = ExtResource("1_player")
+
+[node name="Collision" type="CollisionShape3D" parent="."]
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="BodyVisual" type="Node3D" parent="."]
+script = ExtResource("2_body")
+
+[node name="CameraRig" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig"]
+fov = 75.0
+
+[node name="WeaponView" type="Node3D" parent="CameraRig/Camera3D"]
+script = ExtResource("3_view")
+
+[node name="MuzzleFlash" type="MeshInstance3D" parent="CameraRig/Camera3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.26, -0.22, -0.85)
+visible = false
+mesh = SubResource("SphereMesh_flash")
+
+[node name="NameLabel" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.3, 0)
+billboard = 1
+text = "Player"
+font_size = 32
