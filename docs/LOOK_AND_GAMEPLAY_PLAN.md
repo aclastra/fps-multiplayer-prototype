@@ -6,10 +6,15 @@ ends with a playable build, headless tests, and an in-game check.
 
 ---
 
-## Milestone A — "Atmosphere & Presentation"
+## Milestone A — "Atmosphere & Presentation" (in progress)
 
 Goal: turn the flat dark box into a readable, moody arena and make weapons
 feel alive in the player's hands.
+
+**Done so far:** lighting/environment (`scripts/lighting.gd`) — directional
+light, ambient, ACES tone mapping, fog and fill lights. This fixed the
+"two-color" flat map. Still pending: viewmodel sway/bob, ADS, improved muzzle
+flash, impacts, camera shake and soldier accents.
 
 ### Lighting & atmosphere
 - Add a `WorldEnvironment` with a procedural sky, fog, and ACES tone mapping.
@@ -39,32 +44,50 @@ Files: `scenes/main.tscn`, new `scripts/environment.gd`, `scripts/viewmodel.gd`,
 
 ---
 
-## Milestone B — "Movement & Combat Depth"
+## Milestone B — "Movement & Combat Depth" (rebuild)
 
-Goal: give the player meaningful movement and aiming decisions.
+Status: **planned** (previous attempt was reverted). Goal: the same features,
+but without the choppiness and without changing the core feel.
 
-### Movement
-- **Crouch** (Ctrl): lower capsule/camera speed, server-validated, replicated.
-- **Slide** (crouch while sprinting, or Shift+Ctrl): brief momentum boost with
-  a low pose and recovery; cooldown to prevent spam.
-- Tune jump/air control and acceleration so momentum matters.
-- Optional later: vault/mantle over knee-high cover (needs animation work).
+### Rules for this attempt (from the last failure)
+1. Keep the current renderer settings (`gl_compatibility`, 0.75 render scale).
+   No new lights, shadows or high-poly assets in this milestone.
+2. Base walk/sprint/jump speeds stay unchanged. Any new state must be a
+   deliberate, short-lived modifier, not a replacement.
+3. Each sub-feature gets its own commit so it can be reverted independently.
+4. Measure FPS with the probe before/after each sub-feature; reject anything
+   that drops steady-state FPS below ~50.
+5. Re-use the existing lag-compensated ray path — do not add a second one.
 
-### Combat depth
-- **Headshot multiplier**: server raycast identifies upper capsule band
-  (~0.35 m at the top) and applies 2× damage; HUD shows a distinct hit marker.
-- **Recoil & spread**: per-weapon recoil pattern and bloom that recovers while
-  not firing; server owns the spread so clients cannot aimbot via RPC.
-- **Range falloff**: damage reduces past a weapon's optimal range.
-- Keep lag compensation from the netcode milestone intact — rewind to shot
-  time for both body and head checks.
+### Step 1 — Movement (commit on its own)
+- **Crouch** (Ctrl): visual/camera-only first — lower camera to 0.2 m, scale
+  the soldier visually, reduce speed to ~4.0. Only change the physics capsule
+  if needed for a gameplay reason; if changed, restore it exactly on reset.
+- **Slide**: tap Ctrl while sprinting above 6 m/s → 0.45 s boost to ~12 m/s,
+  1.2 s cooldown. No camera roll, no extra effects.
+- Replicate `crouching`/`sliding` in state; server validates both.
+- Feel check: jump height, air control and stopping distance must match the
+  current build when not crouching/sliding.
 
-Acceptance: crouch/slide work over the network; headshots and recoil are
-server-authoritative; weapon stats in `resources/weapons/*.tres` still drive
-everything.
+### Step 2 — Combat depth (commit on its own)
+- **Headshots**: upper capsule band gets 1.5× damage (not 2×) using the
+  existing rewind position; distinct but subtle hit marker.
+- **Bloom**: small per-weapon spread increase per shot, capped low, decaying
+  while not firing. Server-owned. Recoil kick is visual-only and clamped to
+  2° so aim is not yanked.
+- **Range falloff**: gentle taper from `falloff_start` to `min_damage_scale`.
+- No new particle systems or lights — reuse tracers and hit markers.
+
+Acceptance: crouch/slide work over the network; headshots/bloom/falloff are
+server-authoritative; steady FPS stays >= 50; 3-client headless test clean;
+base movement feel unchanged when the new states are not active.
 
 Files: `scripts/player.gd`, `scripts/weapon_data.gd`,
-`resources/weapons/*.tres`, `scripts/hud.gd`, `scripts/player_body.gd`.
+`resources/weapons/*.tres`, `scripts/hud.gd`.
+
+### Rollback
+Each step is a separate commit. Reverting the step must return to this plan's
+starting point without touching Milestone C, netcode or lighting.
 
 ---
 
