@@ -163,13 +163,14 @@ The development plan is in `docs/ROADMAP.md`. Milestones 1 (match flow/scoring)
 through 4 (match flow, weapons, pickups/grenades, combat feedback) are done;
 next are netcode hardening and delivery.
 
-## Known limitations
+## Netcode
 
-This is a learning prototype, not shippable netcode:
+Client inputs carry sequence numbers; the server discards stale ones and
+echoes the last processed sequence. The local client records its predicted
+moves and replays unacknowledged inputs from authoritative state. Remote
+players interpolate from a 100 ms snapshot buffer, and hitscan uses target
+positions recorded when the shot input arrived (lag compensation). Still
+missing: authentication, input sanity validation, NAT punchthrough, and a
+fixed simulation tick (movement uses `_physics_process`).
 
-- No lag compensation, reconciliation, or client-side hit prediction.
-- No interpolation buffer or tick-rate simulation (uses `_physics_process`).
-- No authentication, input sanity validation, or NAT punchthrough.
-- Single arena, one weapon, one life system.
-
-See `docs/ROADMAP.md` for the planned work.
+See `docs/ROADMAP.md` for the remaining work.

@@ -7,8 +7,13 @@ class_name Player
 ##   * Clients SEND input with @rpc("any_peer", ...) to peer 1.
 ##   * The server SENDS state with @rpc("authority", ...) to all clients.
 ##
-## The local client predicts its own movement so controls feel responsive;
-## remote players are interpolated toward the latest server snapshot.
+## The local client predicts its own movement and reconciles against server
+## state; remote players are interpolated from a buffered snapshot history.
+
+const INTERP_DELAY := 0.1
+const MAX_PREDICTION_FRAMES := 64
+const MAX_STATE_SAMPLES := 32
+const MAX_HISTORY_SAMPLES := 48
 
 # --- Tunables -------------------------------------------------------------
 @export var move_speed := 6.0
@@ -55,6 +60,15 @@ var _net_speed := 0.0
 var _net_grounded := true
 var _net_sprinting := false
 var _net_reloading := false
+
+# Netcode hardening: sequencing, prediction history and interpolation buffer.
+var _local_input_seq := 0
+var _server_input_seq := 0
+var _last_ack_seq := 0
+var _prediction_history: Array = []
+var _state_buffer: Array = []
+var _history: Array = []
+var _last_input_time := 0.0
 
 @onready var _collision: CollisionShape3D = $Collision
 @onready var _body_visual: PlayerBody = $BodyVisual
@@ -208,10 +222,14 @@ func _physics_process(delta: float) -> void:
 			_request_weapon(2)
 		if Input.is_action_just_pressed("grenade"):
 			_request_grenade()
-		if not multiplayer.is_server():
+		_local_input_seq += 1
+		if multiplayer.is_server():
+			_server_input_seq = _local_input_seq
+		else:
 			# The host already has these values locally; RPCs to yourself are
 			# rejected by "any_peer" mode.
-			receive_input.rpc_id(1, _move, yaw, pitch, _sprint, _fire, _jump_held, _reload_requested)
+			receive_input.rpc_id(1, _move, yaw, pitch, _sprint, _fire, _jump_held, _reload_requested, _local_input_seq)
+		_record_prediction(_local_input_seq, delta)
 		_apply_movement(_move, _sprint, _jump_held, delta)
 		# The server owns ammo/reload; clear the one-shot request once sent.
 		_reload_requested = false
@@ -224,6 +242,7 @@ func _physics_process(delta: float) -> void:
 
 	if multiplayer.is_server():
 		_server_tick(delta)
+		_record_history()
 
 	if is_instance_valid(_body_visual):
 		var planar_speed := Vector2(velocity.x, velocity.z).length()
@@ -265,13 +284,88 @@ func _apply_movement(move: Vector2, sprint: bool, jump_held: bool, delta: float)
 	velocity.y -= gravity * delta
 	move_and_slide()
 
-func _interpolate(delta: float) -> void:
-	var t := 1.0 - exp(-14.0 * delta)
-	global_position = global_position.lerp(_net_pos, t)
-	yaw = lerp_angle(yaw, _net_yaw, t)
-	pitch = lerpf(pitch, _net_pitch, t)
+func _record_prediction(seq: int, delta: float) -> void:
+	_prediction_history.append({
+		"seq": seq,
+		"pos": global_position,
+		"vel": velocity,
+		"move": _move,
+		"sprint": _sprint,
+		"jump": _jump_held,
+		"prev_jump": _prev_jump,
+		"delta": delta,
+	})
+	if _prediction_history.size() > MAX_PREDICTION_FRAMES:
+		_prediction_history.remove_at(0)
+
+func _record_history() -> void:
+	_history.append({"time": Time.get_ticks_msec() * 0.001, "pos": global_position})
+	if _history.size() > MAX_HISTORY_SAMPLES:
+		_history.remove_at(0)
+
+func position_at(time: float) -> Vector3:
+	if _history.is_empty():
+		return global_position
+	for sample in _history:
+		if absf(float(sample["time"]) - time) <= 0.03:
+			return sample["pos"]
+	return _history[_history.size() - 1]["pos"]
+
+func _reconcile(auth_pos: Vector3, auth_vel: Vector3, ack_seq: int) -> void:
+	if not _is_local or multiplayer.is_server() or ack_seq <= _last_ack_seq:
+		return
+	_last_ack_seq = ack_seq
+	var start := -1
+	for i in range(_prediction_history.size()):
+		if int(_prediction_history[i]["seq"]) == ack_seq:
+			start = i
+			break
+	if start == -1:
+		global_position = auth_pos
+		velocity = auth_vel
+		return
+
+	var saved_move := _move
+	var saved_sprint := _sprint
+	var saved_jump := _jump_held
+	var saved_prev := _prev_jump
+	global_position = auth_pos
+	velocity = auth_vel
+	for i in range(start + 1, _prediction_history.size()):
+		var entry: Dictionary = _prediction_history[i]
+		_move = entry["move"]
+		_sprint = entry["sprint"]
+		_jump_held = entry["jump"]
+		_prev_jump = entry["prev_jump"]
+		_apply_movement(_move, _sprint, _jump_held, float(entry["delta"]))
+	_move = saved_move
+	_sprint = saved_sprint
+	_jump_held = saved_jump
+	_prev_jump = saved_prev
+	while _prediction_history.size() > 0 and int(_prediction_history[0]["seq"]) <= ack_seq:
+		_prediction_history.remove_at(0)
+
+func _interpolate(_delta: float) -> void:
+	if _state_buffer.is_empty():
+		return
+	var target := Time.get_ticks_msec() * 0.001 - INTERP_DELAY
+	var a: Dictionary = _state_buffer[0]
+	var b: Dictionary = _state_buffer[_state_buffer.size() - 1]
+	for i in range(_state_buffer.size() - 1):
+		if float(_state_buffer[i]["time"]) <= target and float(_state_buffer[i + 1]["time"]) >= target:
+			a = _state_buffer[i]
+			b = _state_buffer[i + 1]
+			break
+	var t := 0.0
+	if float(b["time"]) > float(a["time"]):
+		t = clampf((target - float(a["time"])) / (float(b["time"]) - float(a["time"])), 0.0, 1.0)
+	global_position = (a["pos"] as Vector3).lerp(b["pos"], t)
+	yaw = lerp_angle(float(a["yaw"]), float(b["yaw"]), t)
+	pitch = lerpf(float(a["pitch"]), float(b["pitch"]), t)
 	rotation.y = yaw
 	_camera_rig.rotation.x = pitch
+	while _state_buffer.size() > 2 and float(_state_buffer[1]["time"]) < target:
+		_state_buffer.remove_at(0)
 
 # --- Server-authoritative combat ------------------------------------------
 
@@ -310,28 +404,83 @@ func _server_shoot() -> void:
 		-cos(yaw) * cos(pitch)
 	).normalized()
 	var space := get_world_3d().direct_space_state
+	var excluded: Array = [get_rid()]
+	for node in get_tree().get_nodes_in_group("players"):
+		var other := node as Player
+		if other != null and other != self:
+			excluded.append(other.get_rid())
+
+	# Lag compensation: test against where targets were when the shot input
+	# arrived on the server, not where they are now.
+	var shoot_time := _last_input_time
+	if shoot_time <= 0.0:
+		shoot_time = Time.get_ticks_msec() * 0.001
 
 	var right := base_dir.cross(Vector3.UP).normalized()
 	var up := right.cross(base_dir).normalized()
 	for pellet in range(maxi(1, weapon.pellets)):
 		var spread := deg_to_rad(weapon.spread_deg)
 		var dir := (base_dir + right * randf_range(-spread, spread) + up * randf_range(-spread, spread)).normalized()
-		var end := origin + dir * weapon.range
-		var query := PhysicsRayQueryParameters3D.create(origin, end)
-		query.exclude = [get_rid()]
-		var hit := space.intersect_ray(query)
-		if not hit.is_empty():
-			end = hit.get("position", end)
-		show_tracer.rpc(origin, end)
-		if hit.is_empty():
+		var wall_end := origin + dir * weapon.range
+		var query := PhysicsRayQueryParameters3D.create(origin, wall_end)
+		query.exclude = excluded
+		var wall_hit := space.intersect_ray(query)
+		var wall_t := weapon.range
+		if not wall_hit.is_empty():
+			wall_t = origin.distance_to(wall_hit.get("position", wall_end))
+
+		var best_t := wall_t
+		var best_target: Player = null
+		for node in get_tree().get_nodes_in_group("players"):
+			var candidate := node as Player
+			if candidate == null or candidate == self or candidate.dead:
+				continue
+			var center := candidate.position_at(shoot_time)
+			var t := _ray_capsule_t(origin, dir, center, 0.4, 0.9)
+			if t > 0.0 and t < best_t:
+				best_t = t
+				best_target = candidate
+
+		show_tracer.rpc(origin, origin + dir * best_t)
+		if best_target == null:
 			continue
-		var target: Object = hit.get("collider")
-		if target is Player and target != self:
-			(target as Player).take_damage(weapon.damage, peer_id)
-			if peer_id == multiplayer.get_unique_id():
-				show_hit(weapon.damage, (target as Player).global_position)
-			else:
-				show_hit.rpc_id(peer_id, weapon.damage, (target as Player).global_position)
+		best_target.take_damage(weapon.damage, peer_id)
+		if peer_id == multiplayer.get_unique_id():
+			show_hit(weapon.damage, best_target.global_position)
+		else:
+			show_hit.rpc_id(peer_id, weapon.damage, best_target.global_position)
+
+func _ray_capsule_t(origin: Vector3, dir: Vector3, center: Vector3, radius: float, half_height: float) -> float:
+	var ox := origin.x - center.x
+	var oz := origin.z - center.z
+	var a := dir.x * dir.x + dir.z * dir.z
+	if a > 0.000001:
+		var b := 2.0 * (ox * dir.x + oz * dir.z)
+		var c := ox * ox + oz * oz - radius * radius
+		var disc := b * b - 4.0 * a * c
+		if disc >= 0.0:
+			var sq := sqrt(disc)
+			for value in [(-b - sq) / (2.0 * a), (-b + sq) / (2.0 * a)]:
+				var t := float(value)
+				if t < 0.0:
+					continue
+				var y := origin.y + dir.y * t
+				if y >= center.y - half_height and y <= center.y + half_height:
+					return t
+	for cap_y in [center.y - half_height, center.y + half_height]:
+		var oc := origin - Vector3(center.x, cap_y, center.z)
+		var b2 := oc.dot(dir)
+		var c2 := oc.length_squared() - radius * radius
+		var disc2 := b2 * b2 - c2
+		if disc2 >= 0.0:
+			var sq2 := sqrt(disc2)
+			var t2 := -b2 - sq2
+			if t2 >= 0.0:
+				return t2
+			t2 = -b2 + sq2
+			if t2 >= 0.0:
+				return t2
+	return -1.0
 
 func take_damage(amount: int, attacker_id: int) -> void:
 	if not multiplayer.is_server() or dead:
@@ -418,12 +567,17 @@ func receive_input(
 	sprint: bool,
 	fire: bool,
 	jump: bool,
-	reload: bool
+	reload: bool,
+	seq: int
 ) -> void:
 	if not multiplayer.is_server():
 		return
 	if multiplayer.get_remote_sender_id() != peer_id:
 		return
+	if seq <= _server_input_seq:
+		return
+	_server_input_seq = seq
+	_last_input_time = Time.get_ticks_msec() * 0.001
 	_move = move
 	yaw = new_yaw
 	pitch = clampf(new_pitch, -1.45, 1.45)
@@ -470,10 +624,23 @@ func _send_state(
 	new_kills: int,
 	new_deaths: int,
 	new_weapon_index: int,
-	new_grenades: int
+	new_grenades: int,
+	new_velocity: Vector3,
+	ack_seq: int
 ) -> void:
 	if multiplayer.is_server():
 		return
+	if not _is_local:
+		_state_buffer.append({
+			"time": Time.get_ticks_msec() * 0.001,
+			"pos": pos,
+			"yaw": new_yaw,
+			"pitch": new_pitch,
+		})
+		if _state_buffer.size() > MAX_STATE_SAMPLES:
+			_state_buffer.remove_at(0)
+	else:
+		_reconcile(pos, new_velocity, ack_seq)
 	_net_pos = pos
 	_net_yaw = new_yaw
 	_net_pitch = new_pitch
@@ -569,7 +736,7 @@ func broadcast_state() -> void:
 	_send_state.rpc(
 		global_position, yaw, pitch, health, ammo, dead,
 		Vector2(velocity.x, velocity.z).length(), is_on_floor(), _sprint, _reload_timer > 0.0,
-		kills, deaths, weapon_index, grenades
+		kills, deaths, weapon_index, grenades, velocity, _server_input_seq
 	)
 
 func apply_snapshot(data: Dictionary) -> void:

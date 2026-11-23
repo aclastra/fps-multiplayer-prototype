@@ -107,8 +107,11 @@ Files: `scripts/hud.gd`, `scripts/player.gd`, `scripts/player_body.gd`,
 
 These are important but deliberately deferred until the game is fun:
 
-1. **Netcode hardening** — sequence numbers, reconciliation, snapshot
-   interpolation buffer, hitscan lag compensation.
+1. **Netcode hardening** ✅ done — sequence numbers on client input; server
+   discards stale inputs and echoes the last processed sequence in state;
+   local client replays unacknowledged inputs from authoritative state;
+   remote players interpolate from a 100 ms snapshot buffer; hitscan tests
+   against target positions recorded at the time the shot input arrived.
 2. **Maps & modes** — second arena, objective mode (capture/control point).
 3. **Delivery** — export presets for dedicated server + client, CI headless
    tests, final docs pass.
