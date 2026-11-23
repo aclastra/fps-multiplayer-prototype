@@ -39,6 +39,7 @@ var team := 0
 var kills := 0
 var deaths := 0
 var grenades := 2
+var perk_id := 0  # 0 none, 1 fast hands, 2 heavy armor, 3 lightweight
 
 # --- Local / server-only state --------------------------------------------
 var _is_local := false
@@ -69,6 +70,7 @@ var _prediction_history: Array = []
 var _state_buffer: Array = []
 var _history: Array = []
 var _last_input_time := 0.0
+var _damage_boost_timer := 0.0
 
 @onready var _collision: CollisionShape3D = $Collision
 @onready var _body_visual: PlayerBody = $BodyVisual
@@ -121,6 +123,18 @@ func _update_weapon_visual() -> void:
 		_weapon_view.set_weapon(weapon)
 	if is_instance_valid(_body_visual) and weapon != null:
 		_body_visual.set_weapon(weapon.scene)
+
+func effective_max_health() -> int:
+	return 125 if perk_id == 2 else 100
+
+func effective_reload_time(weapon: WeaponData) -> float:
+	return weapon.reload_time * 0.75 if perk_id == 1 else weapon.reload_time
+
+func effective_sprint_speed() -> float:
+	return sprint_speed * 1.15 if perk_id == 3 else sprint_speed
+
+func damage_multiplier() -> float:
+	return 1.5 if _damage_boost_timer > 0.0 else 1.0
 
 func _request_grenade() -> void:
 	if dead or grenades <= 0:
@@ -267,7 +281,7 @@ func _apply_movement(move: Vector2, sprint: bool, jump_held: bool, delta: float)
 	# Basis vectors already include yaw; +Z is "back", so move.y maps to +Z.
 	var direction := transform.basis.x * move.x + transform.basis.z * move.y
 	var horizontal := Vector3(direction.x, 0.0, direction.z).normalized()
-	var speed := sprint_speed if sprint else move_speed
+	var speed := effective_sprint_speed() if sprint else move_speed
 
 	var jump_edge := jump_held and not _prev_jump
 	_prev_jump = jump_held
@@ -373,6 +387,8 @@ func _server_tick(delta: float) -> void:
 	var weapon := current_weapon()
 	if weapon == null:
 		return
+	if _damage_boost_timer > 0.0:
+		_damage_boost_timer -= delta
 	if _reload_timer > 0.0:
 		_reload_timer -= delta
 		if _reload_timer <= 0.0:
@@ -380,7 +396,7 @@ func _server_tick(delta: float) -> void:
 			ammo_by_weapon[weapon_index] = ammo
 			_reload_timer = 0.0
 	elif _reload_requested and ammo < weapon.magazine and not dead:
-		_reload_timer = weapon.reload_time
+		_reload_timer = effective_reload_time(weapon)
 		show_reload.rpc()
 	_reload_requested = false
 
@@ -444,7 +460,7 @@ func _server_shoot() -> void:
 		show_tracer.rpc(origin, origin + dir * best_t)
 		if best_target == null:
 			continue
-		best_target.take_damage(weapon.damage, peer_id)
+		best_target.take_damage(int(round(weapon.damage * damage_multiplier())), peer_id)
 		if peer_id == multiplayer.get_unique_id():
 			show_hit(weapon.damage, best_target.global_position)
 		else:
@@ -517,6 +533,7 @@ func _respawn() -> void:
 	velocity = Vector3.ZERO
 	yaw = 0.0
 	pitch = 0.0
+	max_health = effective_max_health()
 	health = max_health
 	grenades = 2
 	_refill_ammo()
@@ -547,6 +564,7 @@ func reset_for_match() -> void:
 	velocity = Vector3.ZERO
 	yaw = 0.0
 	pitch = 0.0
+	max_health = effective_max_health()
 	health = max_health
 	grenades = 2
 	_refill_ammo()
@@ -608,8 +626,19 @@ func set_team(value: int) -> void:
 	if is_instance_valid(_body_visual):
 		_body_visual.set_team(team)
 
+@rpc("any_peer", "reliable")
+func set_loadout(weapon_slot: int, perk: int) -> void:
+	if not multiplayer.is_server():
+		return
+	if multiplayer.get_remote_sender_id() != peer_id:
+		return
+	_equip_weapon(clampi(weapon_slot, 0, weapons.size() - 1))
+	perk_id = clampi(perk, 0, 3)
+	max_health = effective_max_health()
+	health = max_health
+
 ## Server -> clients state, broadcast at a fixed rate by main.gd.
-@rpc("authority", "unreliable")
+@rpc("authority", "unreliable", "call_local")
 func _send_state(
 	pos: Vector3,
 	new_yaw: float,
@@ -660,7 +689,7 @@ func _send_state(
 		_update_weapon_visual()
 	_apply_visuals()
 
-@rpc("authority", "unreliable")
+@rpc("authority", "unreliable", "call_local")
 func show_shot() -> void:
 	if dead:
 		return
@@ -671,7 +700,7 @@ func show_shot() -> void:
 	Sound.play(weapon.fire_sound if weapon != null else "fire", -4.0)
 	get_tree().create_timer(0.06).timeout.connect(_hide_flash)
 
-@rpc("authority", "reliable")
+@rpc("authority", "reliable", "call_local")
 func show_hit(damage: int, victim_pos: Vector3) -> void:
 	if not _is_local:
 		return
@@ -680,7 +709,7 @@ func show_hit(damage: int, victim_pos: Vector3) -> void:
 		hud.call("add_hitmarker", damage)
 	Sound.play("hit", -3.0)
 
-@rpc("authority", "unreliable")
+@rpc("authority", "unreliable", "call_local")
 func show_damage(attacker_pos: Vector3) -> void:
 	if not _is_local:
 		return
@@ -691,7 +720,7 @@ func show_damage(attacker_pos: Vector3) -> void:
 		hud.call("show_damage_direction", angle)
 	Sound.play("hurt", -2.0)
 
-@rpc("authority", "unreliable")
+@rpc("authority", "unreliable", "call_local")
 func show_tracer(origin: Vector3, end: Vector3) -> void:
 	var length := origin.distance_to(end)
 	if length < 0.01:
@@ -716,15 +745,35 @@ func show_tracer(origin: Vector3, end: Vector3) -> void:
 			tracer.queue_free()
 	)
 
-@rpc("authority", "reliable")
+@rpc("authority", "reliable", "call_local")
 func show_reload() -> void:
 	var weapon := current_weapon()
 	Sound.play(weapon.reload_sound if weapon != null else "reload", -5.0)
 
-@rpc("authority", "reliable")
+@rpc("authority", "reliable", "call_local")
 func show_pickup() -> void:
 	if _is_local:
 		Sound.play("pickup", -4.0)
+
+func check_killstreak() -> void:
+	if not multiplayer.is_server():
+		return
+	match kills:
+		3:
+			_refill_ammo()
+			show_streak.rpc("STREAK: AMMO RESUPPLY")
+		5:
+			grenades = maxi(grenades, 3)
+			show_streak.rpc("STREAK: GRENADES RESTOCKED")
+		7:
+			_damage_boost_timer = 10.0
+			show_streak.rpc("STREAK: DAMAGE BOOST")
+
+@rpc("authority", "reliable", "call_local")
+func show_streak(text: String) -> void:
+	var hud := get_tree().get_first_node_in_group("hud")
+	if hud != null and hud.has_method("show_announcement"):
+		hud.call("show_announcement", text)
 
 func _hide_flash() -> void:
 	if is_inside_tree():
@@ -751,6 +800,8 @@ func apply_snapshot(data: Dictionary) -> void:
 	deaths = int(data.get("deaths", deaths))
 	weapon_index = int(data.get("weapon", weapon_index))
 	grenades = int(data.get("grenades", grenades))
+	perk_id = int(data.get("perk", perk_id))
+	max_health = effective_max_health()
 	display_name = String(data.get("name", display_name))
 	if is_instance_valid(_body_visual):
 		_body_visual.set_team(team)

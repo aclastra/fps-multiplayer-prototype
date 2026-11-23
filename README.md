@@ -163,6 +163,14 @@ The original roadmap is in `docs/ROADMAP.md` (milestones 1–4 and netcode
 hardening are done). Current focus is look and gameplay — see
 `docs/LOOK_AND_GAMEPLAY_PLAN.md` for the next themed milestones.
 
+## Loadouts & progression
+
+The host/join menu lets you pick a primary weapon and a perk before joining:
+Fast Hands (25% faster reload), Heavy Armor (+25 HP) or Lightweight (15%
+faster sprint). Killstreaks are server-validated: 3 kills refills ammo, 5
+restocks grenades, 7 grants a 10-second damage boost. Announcements appear in
+the HUD. RPCs use `call_local`, so the host sees its own effects too.
+
 ## Netcode
 
 Client inputs carry sequence numbers; the server discards stale ones and

@@ -98,7 +98,7 @@ func _broadcast() -> void:
 		return
 	_send_state.rpc(state, scores, time_left, countdown, winner)
 
-@rpc("authority", "reliable")
+@rpc("authority", "reliable", "call_local")
 func _send_state(new_state: int, new_scores: Dictionary, new_time: float, new_countdown: float, new_winner: int) -> void:
 	state = new_state
 	scores = new_scores

@@ -11,6 +11,8 @@ var _center_msg: Label
 var _scoreboard: PanelContainer
 var _scoreboard_list: VBoxContainer
 var _hitmarker: Label
+var _announcement: Label
+var _announcement_time := 0.0
 var _floaters: Array = []
 var _damage_arrows: Array = []
 var _hitmarker_time := 0.0
@@ -57,6 +59,15 @@ func _ready() -> void:
 	_feed.offset_top = 14
 	_feed.offset_right = -14
 	add_child(_feed)
+
+	_announcement = _make_label("", 20)
+	_announcement.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_announcement.offset_left = -300
+	_announcement.offset_right = 300
+	_announcement.offset_top = 50
+	_announcement.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_announcement.visible = false
+	add_child(_announcement)
 
 	_banner = _make_label("BLUE 0  -  0 RED", 18)
 	_banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -140,6 +151,11 @@ func _process(delta: float) -> void:
 		_status.text = "DEAD — respawning..." if p.dead else ""
 		return
 
+func show_announcement(text: String) -> void:
+	_announcement.text = text
+	_announcement.visible = true
+	_announcement_time = 2.5
+
 func add_hitmarker(damage: int) -> void:
 	_hitmarker.visible = true
 	_hitmarker_time = 0.12
@@ -158,6 +174,10 @@ func show_damage_direction(angle: float) -> void:
 	_damage_arrows.append({"label": arrow, "time": 1.0})
 
 func _animate_feedback(delta: float) -> void:
+	if _announcement_time > 0.0:
+		_announcement_time -= delta
+		if _announcement_time <= 0.0:
+			_announcement.visible = false
 	if _hitmarker_time > 0.0:
 		_hitmarker_time -= delta
 		if _hitmarker_time <= 0.0:

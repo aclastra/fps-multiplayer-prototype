@@ -33,6 +33,8 @@ var _state_accum := 0.0
 var _dedicated := false
 var my_name := "Player"
 var my_team := 0
+var my_weapon := 0
+var my_perk := 0
 
 func _ready() -> void:
 	add_to_group("game_manager")
@@ -119,7 +121,7 @@ func _sync_grenade(id: int, pos: Vector3) -> void:
 	if is_instance_valid(visual):
 		visual.global_position = pos
 
-@rpc("authority", "reliable")
+@rpc("authority", "reliable", "call_local")
 func _remove_grenade(id: int, pos: Vector3) -> void:
 	if multiplayer.is_server():
 		return
@@ -172,6 +174,10 @@ func set_local_name(value: String) -> void:
 func set_local_team(value: int) -> void:
 	my_team = clampi(value, 0, 1)
 
+func set_local_loadout(weapon: int, perk: int) -> void:
+	my_weapon = clampi(weapon, 0, 2)
+	my_perk = clampi(perk, 0, 3)
+
 func host() -> void:
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_server(PORT, MAX_PLAYERS)
@@ -213,6 +219,7 @@ func report_kill(killer_id: int, victim_id: int) -> void:
 	var victim := get_player(victim_id)
 	if killer != null:
 		killer.kills += 1
+		killer.call("check_killstreak")
 	if victim != null:
 		victim.deaths += 1
 	_receive_kill.rpc(player_display_name(killer_id), player_display_name(victim_id))
@@ -300,6 +307,7 @@ func _build_snapshot() -> Array:
 			"deaths": p.deaths,
 			"weapon": p.weapon_index,
 			"grenades": p.grenades,
+			"perk": p.perk_id,
 		})
 	return snapshot
 
@@ -322,6 +330,7 @@ func _receive_snapshot(snapshot: Array) -> void:
 		if id == me:
 			p.set_display_name.rpc_id(1, my_name)
 			p.set_team.rpc_id(1, my_team)
+			p.set_loadout.rpc_id(1, my_weapon, my_perk)
 	_enter_game()
 
 @rpc("authority", "reliable")
@@ -345,7 +354,7 @@ func _clear_players() -> void:
 	_players.clear()
 	_spawn_index.clear()
 
-@rpc("authority", "reliable")
+@rpc("authority", "reliable", "call_local")
 func _receive_kill(killer: String, victim: String) -> void:
 	if _hud.has_method("add_kill"):
 		_hud.call("add_kill", killer, victim)

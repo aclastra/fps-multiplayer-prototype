@@ -32,6 +32,19 @@ func _ready() -> void:
 	team_option.add_item("Team: Rust Red", 1)
 	vbox.add_child(team_option)
 
+	var weapon_option := OptionButton.new()
+	weapon_option.add_item("Primary: Rifle", 0)
+	weapon_option.add_item("Primary: SMG", 1)
+	weapon_option.add_item("Primary: Shotgun", 2)
+	vbox.add_child(weapon_option)
+
+	var perk_option := OptionButton.new()
+	perk_option.add_item("Perk: None", 0)
+	perk_option.add_item("Perk: Fast Hands", 1)
+	perk_option.add_item("Perk: Heavy Armor", 2)
+	perk_option.add_item("Perk: Lightweight", 3)
+	vbox.add_child(perk_option)
+
 	var ip_line := LineEdit.new()
 	ip_line.placeholder_text = "Server IP"
 	ip_line.text = "127.0.0.1"
@@ -67,6 +80,7 @@ func _ready() -> void:
 			return
 		game.call("set_local_name", name_line.text)
 		game.call("set_local_team", team_option.selected)
+		game.call("set_local_loadout", weapon_option.selected, perk_option.selected)
 		game.call("host")
 	)
 	join_btn.pressed.connect(func() -> void:
@@ -75,6 +89,7 @@ func _ready() -> void:
 			return
 		game.call("set_local_name", name_line.text)
 		game.call("set_local_team", team_option.selected)
+		game.call("set_local_loadout", weapon_option.selected, perk_option.selected)
 		game.call("join", ip_line.text)
 	)
 

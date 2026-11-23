@@ -68,9 +68,12 @@ Files: `scripts/player.gd`, `scripts/weapon_data.gd`,
 
 ---
 
-## Milestone C — "Loadouts & Progression"
+## Milestone C — "Loadouts & Progression" ✅ done
 
 Goal: give sessions a light meta layer without a backend.
+
+Also fixed: server-to-client RPCs now carry `call_local`, so the host sees its
+own muzzle flashes, tracers, kill feed, score updates and streak announcements.
 
 - **Loadout screen** in the menu: pick primary (rifle/SMG/shotgun) and one
   perk before joining.
