@@ -79,6 +79,8 @@ var _prev_crouch := false
 var _slide_timer := 0.0
 var _slide_cooldown := 0.0
 var _camera_base_y := 0.6
+var _bloom := 0.0
+var _recoil_kick := 0.0
 
 @onready var _collision: CollisionShape3D = $Collision
 @onready var _body_visual: PlayerBody = $BodyVisual
@@ -230,6 +232,9 @@ func _process(delta: float) -> void:
 		var step := _correction_offset * minf(1.0, delta * 12.0)
 		global_position += step
 		_correction_offset -= step
+	_recoil_kick = maxf(0.0, _recoil_kick - delta * 12.0)
+	if _is_local and is_instance_valid(_camera_rig):
+		_camera_rig.rotation.x = pitch - deg_to_rad(_recoil_kick)
 
 func _physics_process(delta: float) -> void:
 	if multiplayer.multiplayer_peer == null:
@@ -449,6 +454,7 @@ func _server_tick(delta: float) -> void:
 		return
 	if _damage_boost_timer > 0.0:
 		_damage_boost_timer -= delta
+	_bloom = maxf(0.0, _bloom - delta * 2.0)
 	if _reload_timer > 0.0:
 		_reload_timer -= delta
 		if _reload_timer <= 0.0:
@@ -495,7 +501,7 @@ func _server_shoot() -> void:
 	var right := base_dir.cross(Vector3.UP).normalized()
 	var up := right.cross(base_dir).normalized()
 	for pellet in range(maxi(1, weapon.pellets)):
-		var spread := deg_to_rad(weapon.spread_deg)
+		var spread := deg_to_rad(weapon.spread_deg + weapon.bloom_per_shot * _bloom)
 		var dir := (base_dir + right * randf_range(-spread, spread) + up * randf_range(-spread, spread)).normalized()
 		var wall_end := origin + dir * weapon.range
 		var query := PhysicsRayQueryParameters3D.create(origin, wall_end)
@@ -507,6 +513,7 @@ func _server_shoot() -> void:
 
 		var best_t := wall_t
 		var best_target: Player = null
+		var best_center := Vector3.ZERO
 		for node in get_tree().get_nodes_in_group("players"):
 			var candidate := node as Player
 			if candidate == null or candidate == self or candidate.dead:
@@ -516,15 +523,25 @@ func _server_shoot() -> void:
 			if t > 0.0 and t < best_t:
 				best_t = t
 				best_target = candidate
+				best_center = center
 
 		show_tracer.rpc(origin, origin + dir * best_t)
 		if best_target == null:
 			continue
-		best_target.take_damage(int(round(weapon.damage * damage_multiplier())), peer_id)
+		var hit_y := origin.y + dir.y * best_t
+		var headshot := hit_y > best_center.y + 0.55
+		var falloff := 1.0
+		if best_t > weapon.falloff_start and weapon.range > weapon.falloff_start:
+			var ratio := clampf((best_t - weapon.falloff_start) / (weapon.range - weapon.falloff_start), 0.0, 1.0)
+			falloff = lerpf(1.0, weapon.min_damage_scale, ratio)
+		var final_damage := int(round(weapon.damage * damage_multiplier() * falloff * (1.5 if headshot else 1.0)))
+		best_target.take_damage(final_damage, peer_id)
 		if peer_id == multiplayer.get_unique_id():
-			show_hit(weapon.damage, best_target.global_position)
+			show_hit(final_damage, best_target.global_position, headshot)
 		else:
-			show_hit.rpc_id(peer_id, weapon.damage, best_target.global_position)
+			show_hit.rpc_id(peer_id, final_damage, best_target.global_position, headshot)
+
+	_bloom = minf(weapon.bloom_max, _bloom + 1.0)
 
 func _ray_capsule_t(origin: Vector3, dir: Vector3, center: Vector3, radius: float, half_height: float) -> float:
 	var ox := origin.x - center.x
@@ -602,6 +619,8 @@ func _respawn() -> void:
 	sliding = false
 	_slide_timer = 0.0
 	_slide_cooldown = 0.0
+	_bloom = 0.0
+	_recoil_kick = 0.0
 	_apply_stance_visual()
 	_correction_offset = Vector3.ZERO
 	_prediction_history.clear()
@@ -640,6 +659,8 @@ func reset_for_match() -> void:
 	sliding = false
 	_slide_timer = 0.0
 	_slide_cooldown = 0.0
+	_bloom = 0.0
+	_recoil_kick = 0.0
 	_apply_stance_visual()
 	_correction_offset = Vector3.ZERO
 	_prediction_history.clear()
@@ -779,16 +800,18 @@ func show_shot() -> void:
 		_body_visual.fire()
 	_flash.visible = true
 	var weapon := current_weapon()
+	if _is_local and weapon != null:
+		_recoil_kick = minf(2.0, _recoil_kick + weapon.recoil_deg)
 	Sound.play(weapon.fire_sound if weapon != null else "fire", -4.0)
 	get_tree().create_timer(0.06).timeout.connect(_hide_flash)
 
 @rpc("authority", "reliable", "call_local")
-func show_hit(damage: int, victim_pos: Vector3) -> void:
+func show_hit(damage: int, victim_pos: Vector3, headshot: bool = false) -> void:
 	if not _is_local:
 		return
 	var hud := get_tree().get_first_node_in_group("hud")
 	if hud != null and hud.has_method("add_hitmarker"):
-		hud.call("add_hitmarker", damage)
+		hud.call("add_hitmarker", damage, headshot)
 	Sound.play("hit", -3.0)
 
 @rpc("authority", "unreliable", "call_local")

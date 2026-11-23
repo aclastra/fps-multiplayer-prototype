@@ -156,8 +156,9 @@ func show_announcement(text: String) -> void:
 	_announcement.visible = true
 	_announcement_time = 2.5
 
-func add_hitmarker(damage: int) -> void:
+func add_hitmarker(damage: int, headshot: bool = false) -> void:
 	_hitmarker.visible = true
+	_hitmarker.modulate = Color(1, 0.85, 0.6) if headshot else Color(1, 1, 1)
 	_hitmarker_time = 0.12
 	var center := get_viewport().get_visible_rect().size * 0.5
 	var label := _make_label(str(damage), 20)

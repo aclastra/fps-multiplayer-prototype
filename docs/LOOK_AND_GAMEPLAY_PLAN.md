@@ -69,7 +69,7 @@ but without the choppiness and without changing the core feel.
 - Feel check: jump height, air control and stopping distance must match the
   current build when not crouching/sliding.
 
-### Step 2 — Combat depth (commit on its own)
+### Step 2 — Combat depth ✅ done (own commit)
 - **Headshots**: upper capsule band gets 1.5× damage (not 2×) using the
   existing rewind position; distinct but subtle hit marker.
 - **Bloom**: small per-weapon spread increase per shot, capped low, decaying
