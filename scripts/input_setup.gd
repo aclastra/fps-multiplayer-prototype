@@ -14,6 +14,7 @@ func _ready() -> void:
 	_add_key("weapon_2", KEY_2)
 	_add_key("weapon_3", KEY_3)
 	_add_key("grenade", KEY_G)
+	_add_key("crouch", KEY_CTRL)
 	_add_mouse("fire", MOUSE_BUTTON_LEFT)
 
 func _add_key(action: String, keycode: Key) -> void:

@@ -59,7 +59,7 @@ but without the choppiness and without changing the core feel.
    that drops steady-state FPS below ~50.
 5. Re-use the existing lag-compensated ray path — do not add a second one.
 
-### Step 1 — Movement (commit on its own)
+### Step 1 — Movement ✅ done (own commit)
 - **Crouch** (Ctrl): visual/camera-only first — lower camera to 0.2 m, scale
   the soldier visually, reduce speed to ~4.0. Only change the physics capsule
   if needed for a gameplay reason; if changed, restore it exactly on reset.

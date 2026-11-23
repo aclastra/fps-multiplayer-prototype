@@ -47,6 +47,7 @@ Click into a game window once to capture the mouse before playing.
 | Sprint | Shift |
 | Jump | Space |
 | Reload | R |
+| Crouch / slide | Ctrl (hold to crouch, tap while sprinting to slide) |
 | Switch weapons | 1 / 2 / 3 |
 | Throw grenade | G |
 | Release mouse | Esc (click to recapture) |
